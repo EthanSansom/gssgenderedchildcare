@@ -6,7 +6,7 @@ output:
   bookdown::pdf_document2:
 toc: yes
 abstract: "While gender equality in North America has improved incrementally over the past decades, Canadian females today remain disproportionatley responcible for providing unpaid childcare labour. Even as substantially more women join the Canadian labour force, men constiently spend less time caring for their children than women, irrespective of earnerings. In this paper, the time spent by Canadian males and females caring for young children and others is analysed to assess the extent of disparities in care time, and the effect of personal and household earnerings on childcare. At all levels of personal income, females are found to spend more time on average caring for young children than men, including cases where the female is the sole earner in their household."
-thanks: "Code and data are available at: https://github.com/EthanSansom/torontocitytrees"
+thanks: "Code and data are available at: https://github.com/EthanSansom/gssgenderedchildcare"
 bibliography: references.bib
 ---
 
