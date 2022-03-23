@@ -1,0 +1,899 @@
+---
+title: "Canadian Females in Two-Parent Households Spend More Time than Males on Childcare Irrespective of Income Level"
+author: "Ethan Sansom"
+date: "22 March 2022"
+output:
+  bookdown::pdf_document2:
+toc: yes
+abstract: "While gender equality in North America has improved incrementally over the past decades, Canadian females today remain disproportionatley responcible for providing unpaid childcare labour. Even as substantially more women join the Canadian labour force, men constiently spend less time caring for their children than women, irrespective of earnerings. In this paper, the time spent by Canadian males and females caring for young children and others is analysed to assess the extent of disparities in care time, and the effect of personal and household earnerings on childcare. At all levels of personal income, females are found to spend more time on average caring for young children than men, including cases where the female is the sole earner in their household."
+thanks: "Code and data are available at: https://github.com/EthanSansom/torontocitytrees"
+bibliography: references.bib
+---
+
+```{r setup, include = FALSE}
+# Load Packages ----------------------------------------------------------------
+library(tidyverse)
+library(knitr)
+library(dplyr)
+library(ggplot2)
+library(modelsummary) # For creating summary tables
+library(here)         # For referencing files in directory
+library(kableExtra)   # For formatting tables
+library(gridExtra)    # For arranging graphs
+library(cowplot)      # For formatting graphs
+library(bookdown)     # For cross referencing
+library(estimatr)     # For estimating weighted means and standard deviation
+
+# Load Data --------------------------------------------------------------------
+gss_data <- read_csv(here("inputs/data/clean_2015_gss.csv"))
+```
+
+
+```{r create_variables, include = FALSE}
+# Create Variables for Analysis ------------------------------------------------
+gss_data <-
+  gss_data |>
+  mutate(
+    # Create a total for time spent doing any care work
+    duration_care_total =
+      rowSums(across(matches("duration.*care.*child|duration.*care.*adult")))
+  ) |>
+  
+  mutate(  
+    # Create totals of time spent care for children (overall, personal, and accompanying)
+    duration_personal_care_of_child_total = 
+      duration_personal_care_of_child_14_under + duration_personal_care_of_child_15_plus,
+    duration_accompanying_care_of_child_total = 
+      duration_accompanying_care_of_child_14_under +
+      duration_accompanying_care_of_child_15_plus,
+    
+    # Create total for time spent generating income
+    duration_paid_work_total =
+      duration_paid_work + 
+      duration_paid_training + 
+      duration_other_income_generating_activities
+    )
+```
+
+```{r create_factors, include=FALSE}
+# Create Factor Variables ------------------------------------------------------
+gss_data$personal_income_group <- 
+  factor(
+    x = gss_data$personal_income_group,
+    levels= c(
+      "Less than $20,000", 
+      "$20,000 to $39,999", 
+      "$40,000 to $59,999",
+      "$60,000 to $79,999",
+      "$80,000 to $99,999",
+      "$100,000 to $119,999",
+      "$120,000 or more"
+      ),
+    ordered = TRUE
+    )
+
+gss_data$household_income_group <-
+  factor(
+    x = gss_data$household_income_group,
+    levels= c(
+      "Less than $20,000", 
+      "$20,000 to $39,999", 
+      "$40,000 to $59,999",
+      "$60,000 to $79,999",
+      "$80,000 to $99,999",
+      "$100,000 to $119,999",
+      "$120,000 to $139,999",
+      "$140,000 or more"
+      ),
+    ordered = TRUE
+    )
+
+gss_data$diff_income <-
+  factor(
+    x = gss_data$diff_income,
+    levels= c(
+      "Same Income",
+      "Less than $20,000", 
+      "$20,000 to $39,999", 
+      "$40,000 to $59,999",
+      "$60,000 to $79,999",
+      "$80,000 to $99,999",
+      "$100,000 to $119,999",
+      "Ambiguous"
+      ),
+    ordered = TRUE
+    )
+```
+
+# Introduction
+
+In spite of decades of gradual progress on gender equality in North America and a drastic increase in female labour force participation, Canadian females today bear a much larger childcare burden than Canadian males [@Shafer]. In 2015, Canadian mothers on average were found to have spent around 30% more time on housework than fathers, and 40% more time on childcare [@Moyser]. In their paper analyzing gender inequality in Canadian childcare during the pandemic, authors @Johnston note that women spend a greater amount of time on childcare than men, regardless of time spent on paid employment. Further, they find that the during the COVID-19 pandemic, the average Canadian woman with children at home reported spending almost 50 hours more per week on child care than was reported by the average Canadian man [@Johnston]. 
+
+@Moyser identify several commonly cited theoretical justifications of the gendered division of labour in Canada. For instance, gendered division of childcare labour may result from the expression of so-called “appropriate” gender norms by both males and females, as are enforced by social, cultural, and institutional pressures [@Moyser]. Females, even those who are the primary income earners in their household, may take on additional childcare tasks to adhere to social constructs of women as caregivers [@Johnston]. Alternatively, the gendered division childcare labour has been theorized as an economically rational allocation of a household’s time resources, based on the earning potential of each parent or caregiver [@Moyser]. Under this framework, a dual parent household attempting to maximize their income would allocate the majority of childcare time and labour to the parent with the lowest earnings or educational attainment, while the other parent is responsible for providing the household with income. Moreover, the parent with higher earning potential may leverage their economic power to avoid childcare responsibilities at home, forcing their partner to take over the childcare role [@Moyser]. If this theory holds true, then gendered differences in childcare time expenditure would be expected to diminish for females with high levels of income and for females who are the sole income earners within their households. Further, both males and females would experience similar declines in personal childcare labour and time use as their incomes increased.
+
+To assess the validity of the theory of economically rational household labour allocation, this paper investigates the time spent on childcare and other care activities in the Canadian population. Using data collected from the 2015 Canadian General Social Survey (GSS) on Time Use [@CHASS], this paper compares time spent on the care of young children, and on care related activities more generally, by Canadian males and females in comparable income categories. In particular, the paper analyses time spent on care by males and females with low personal income levels (\$20,000 Canadian dollars or below), with high personal income levels (\$140,000 Canadian dollars or above), and the duration of care time spent by males and females who are the sole income earners within their household. At all levels of income detailed in the GSS, females on average spend more time on both the care of young children (aged 14 and below) and on care in general compared to males. Consistent with the theory of rational household labour allocation, males and females both experience similar declines in childcare duration as income increases. Females who are the sole income earners in their households, however, are shown to spend more time on average caring for young children than male sole income earners, and are much more likely to spend greater than 100 minutes a day on childcare. Even in cases where Canadian females clearly possess higher earnings potential relative to their partner, gendered differences in household childcare allocation persist, contradicting the theory of rational household labour allocation.
+
+In the remaining sections of this paper, a detailed review of the data collection process used to implement the 2015 Canadian GSS on Time Use is provided, followed by a description of the specific subset of data used to conduct this investigation. Utilizing this data, differences in childcare and general care time use between Canadian males and females are then depicted and discussed in the broader context of gendered discrepancies in unpaid care labour. The paper concludes with a discussion of its limitations. In the appendix, a supplementary survey to the 2015 Canadian GSS on Time Use is proposed to improve subsequent analyses. The R statistical software [@citeR] is used to load, clean, and visualize the data in this paper, as well as to compile the paper itself. The `tidyverse` [@citetidyverse] and `dplyr` [@citedplyr] are used to manipulating data, while `cowplot` [@citecowplot], `ggplot2` [@citeggplot2], `gridExtra` [@citegridExtra], and `kableExtra` [@citekableExtra] are used to create nicely formatted graphs and tables. Additionally, packages `modelsummary` [@citemodelsummary] and `estimatr` [@citeestimatr] are used to generate summary tables. The package `here` [@citehere] is used for directory file path management. Finally, `bookdown` [@citebookdown], `knitr` [@citeknitr], and `tinytex` [@citetinytex] are used to format and compile this paper.
+
+# Data Collection
+
+## Survey Description
+
+The Canadian General Social Survey on Time Use, first conducted in 1986 and repeated every five to six years, provides data on how the Canadian population manages their time each day and how their time use contributes to personal well-being [@gsstechnical; @gssinfo]. The 2015 time use survey contains a standard set of socio-demographic questions regarding sex, age, income level, family structure, and location, as well as qualitative questions on respondents’ perceptions of commuting, labour, unpaid work, community, and time use [@gssinfo; @survey]. To collect quantitative data on Canadians’ time use, respondents are also asked to chronologically record all activities (lasting greater than ten minutes) for a single 24-hour period [@survey].
+
+## Population
+
+The target population of the survey are all non-institutionalized individuals, aged 15 years or older, residing within the Canadian provinces. Notably, this population criteria excludes all individuals living in the three Canadian territories, Yukon, Northwest Territories, and Nunavut [@userguide]. Of the Canadian provinces and territories, these regions have the highest proportion of Indigenous peoples in their populations [@parliment]. In 2016, the populations of Yukon, the Northwest Territories, and Nunavut were 23%, 51%, and 86% Indigenous respectively, compared to 18% in Saskatchewan, the province with the largest proportion Indigenous population [@parliment]. Systems in place for collecting statistics on Indigenous peoples in Canada are less robust than those for other demographics [@OECD]. Canadian census data for instance has under sampled populations in the territories, relative to the provinces, in censuses from 1991 to 2016 [@parliment; @Parent]. Data from the 2015 GSS on Time Use then, produces estimates that cannot be extrapolated to the entire Canadian Indigenous population, as this data is collected from samples which are both not representative of the Canadian Indigenous population and which contain relatively few members of the Indigenous population [@Parent]. The failure of Canadian Statistical Agencies to collect representative data on Indigenous populations, deprives these groups of the insights and services which result from the analysis of socio-economic, demographic, and other data.
+
+## Frame
+
+The 2015 time use survey was generally conducted over telephone, and the survey frame likewise consists of a set of Canadian landline and cellular telephone numbers [@userguide]. Unlike prior GSS's on time use, which were conducted by dialing random telephone digits and which did not include cellphone numbers, the 2015 time use survey frame was constructed via two linked sources of telephone numbers [@userguide]. The first source used was the list of all landline and cellular telephone numbers in use, which were available to Statistics Canada from census data and telecommunication companies [@userguide]. Secondly, the Address Registrar, a dataset of all dwellings within the provinces, was used to associate groups of telephone numbers with a individual household [@userguide]. Of the telephone numbers available, 87% were associated with an address in the registrar [@userguide]. The remaining 13% of telephone numbers not associated with an address were considered as single records of a potential household [@userguide]. The innovation of linking telephone numbers to houses in the 2015 survey prevents repeated counting of single households with multiple linked telephone numbers in the survey data and increases coverage of households without landlines, both resulting in a survey frame which is more representative of the Canadian population than previous GSS cycles on Time Use [@userguide].
+
+## Stratification
+
+To select a sample representative of the Canadian population, the 2015 GSS on Time Use employs a geographically stratified sample design [@gssinfo]. The Canadian provinces containing the survey population are partitioned into 27 geographical areas (strata), into which households and individual cellphones (not linked to a household) from the survey frame are sorted [@userguide]. Several of the 27 strata are individual Census Metropolitan Areas, including Regina, Saskatoon, Calgary, Edmonton, Toronto, Ottawa, Hamilton, Montreal, Quebec City, St. John’s, Halifax, Saint John, and Vancouver [@userguide]. To ensure sufficient sample sizes for precise estimates at both the national and strata-level, the survey was carried out until pre-identified minimum sample sizes from each strata were attained [@userguide]. Additionally, this measure ensures that survey data is representative of populations across the Canadian provinces.
+
+## Sampling
+
+Within each strata, a simple random sample (without replacement) of household and telephone records from within the frame was selected [@userguide]. The data collection for the 2015 time use survey took place between April 7th 2015 and April 6th 2016. Selected records associated with a household were mailed a contact letter prior to the survey date [@gssinfo]. Additionally, these and all other records were contacted via telephone to confirm participation in the survey [@gssinfo]. Within households that consented to be surveyed, a single eligible house member within the survey population was randomly selected to be surveyed [@userguide]. 
+
+A total of 45,534 telephone numbers within the frame were contacted, out of which 17,390 responded to and completed the survey [@userguide]. The high non-response rate associated with the 2015 GSS on Time Use, which demanded a significant time investment on the behalf of respondents to record their activities for 24-hour period, limited the sample size of the survey to below the target sample size of 22,000 [@userguide]. Such limitations may reduce the precision of estimates made using the survey data, by consequence of reduced sample size, and limits extrapolation of the results to the full Canadian population, via selection bias of survey respondents into the sample. In particular, non-response rates varied by certain demographics within the population [@userguide]. For instance, non-respondents were more likely to be younger (aged 15-24) and to identify as male [@userguide]. Consequently, young males are underrepresented in the sample as compared to the population of young males in the Canadian provinces, threatening the external validity of estimates derived from the sample.
+
+## Non-Response and Imputation
+
+To mitigate the negative consequences of high non-response rates to the 2015 time use survey, individual survey respondents were provided a weight [@gssinfo; @userguide]. Subsequent estimations using the survey data use these weights to make some respondents’ data more influential in the estimate than that of other respondents [@userguide]. This measure was taken to ensure that the data obtained from the survey was as representative of the survey’s target population as possible. The weight of each respondent was determined using demographic characteristics of the respondent and know characteristics of non-respondents [@gssinfo]. For instance, the weights of respondents from British Columbia, where non-response was known to be high, were increased to accurately represent the proportion of the target population which resided in British Columbia [@gssinfo]. Several other characteristics, such as age, sex, and income level, were used to adjust respondents’ weights and provide a more representative sample of the target population [@gssinfo; @userguide]. Summary statistics and plots which appear throughout this paper are computed using these survey weights, as is recommended by Statistics Canada [@userguide].
+
+Because respondent weights are calculated using a set of characteristics of each respondent, non-response was not permitted for certain survey questions regarding sex, income, and other variables used for weighting [@userguide]. In the cases where the sex of the survey respondent was missing, values were imputed (inferred) from examination of their survey responses and available household data [@userguide]. Income information was obtained from 2014 tax filings 88.6% of respondents, and was used to identify respondents’ personal and household income in the case of non-response. The use of tax data was particularly influential in mitigating non-response bias, as income related survey questions are often sensitive and are subject to high rates of non-response [@gsstechnical]. Where income data was unavailable, respondents’ income information was imputed as well [@userguide].
+
+
+## Survey Design
+
+The 2015 time use survey was primarily conducted via telephone interview, and in some cases via a combination of telephone interview and digital survey [@gssinfo; @userguide]. The interview style was conversational, and therefore reduced the need of survey respondents to independently interpret the meaning of survey questions [@userguide]. The full set of questions and valid responses included in the survey are included in Appendix Figure \@ref(fig:survey). All respondents were able to conduct their interview in either French or English, but interviewers were allowed to conduct interviews in other languages in which they were fluent (upon the request of the respondent) [@gssinfo]. The average telephone survey took 45 minutes to complete [@gssinfo].
+
+Prior to the implementation of the survey on 2015, Statistics Canada’s Questionnaire Design Resource Center (QDRC) carried out practice surveys in four cities within three provinces [@gssinfo]. Using the feedback of respondents and advice from the QDRC, the time use survey was edited for clarity and relevance [@gssinfo]. For the assurance of quality data collection, interviewers were trained in advance of survey implementation and during interviews were assisted by Computer Assisted Telephone Interviewing (CATI) software [@gssinfo]. The CATI software was used to edit the flow of the interview and questionnaire dependent on survey responses [@gssinfo]. For example, CATI may not prompt an interviewer to discuss the marital status of a respondent, if that respondent had previously identified as single. Such intervention reduces errors and misinterpretations which result from posing survey questions not relevant to the respondent. CATI software was further used to allow interviewers to enter data during the interview and to prevent interviewers from entering values which were out of range [@gssinfo]. The software, for example, may prevent negative integer values of respondent age from being recorded by interviewers. This intervention further reduces the chance of recording incorrect data which would invalidate the survey results. An additional series of checks were performed after data collection to verify its accuracy, using available data on survey respondents [@gssinfo]. Self-reported ages from the survey for example were compared to known birthdates of the respondents [@gssinfo].
+
+While many aspects of the survey were common to national surveys, such as questions on sex, age, and income status, the 2015 time use survey featured a novel set of questions regarding respondents’ time use over the course of a single day [@gssinfo]. In particular, survey respondents were asked, prior to completion of the survey, to keep a record of all activities, as well as the time and the duration of said activities, in a 24-hour period beginning at 4:00 AM in the respondents’ time zone [@gsstechnical; @userguide]. Respondents were asked to report activities with durations of at least 10 minutes and were permitted to report up to two simultaneous tasks [@gsstechnical; @userguide]. In addition, respondents were asked where they were during each activity, who they were with (if anyone), and whether or not they used any information technology (such as a computer) during the activity [@gsstechnical]. Such reporting requires a significant amount of time on the behalf of the respondent, and the reported durations, activities, and locations are subject to measurement errors from rounding, forgetfulness, and failure to record on part of the interviewee. As such, survey data on time use may produce significantly biased estimates of population parameters regarding Canadians’ time use.
+
+\newpage
+
+# Data Description
+
+## Selected Variables
+
+This paper utilizes a subset of data collected by the 2015 Canadian GSS on Time Use. In particular, only the subset of 3235 respondents living with a spouse/partner, and children below the age of 25, are considered. Restricting the sample to this block controls for factors such as lack of spousal childcare support or additional childcare support from other family members living in the home, both of which effect the childcare time spent by survey respondents. In addition, only variables pertaining to the duration of respondent time use and income generating activities are considered in the analysis. Demographic variables for sex as well as personal and household income level^[All incomes are reported before tax.] are also included. Table \@ref(tab:datasample) provides a full description of all variables which are used for this investigation.
+
+```{r variabledescription, fig.cap = "Description of Variables", echo = FALSE}
+# Create a table describing variables used for analysis ------------------------
+var_table <-
+  tibble(
+    "Variable Name" = c(
+      "Sex",
+      "Weight",
+      "Personal Income Group",
+      "Household Income Group",
+      "Income Difference",
+      "Paid Work",
+      # Care of Individuals outside of Respondent's Household
+      "Care of Children 14 and Below",
+      "Accompanying Children 14 and Below",
+      "Care of Children 15 and Above",
+      "Accompanying Children 15 and Above",
+      "Care of Children Total",
+      "Accompanying Children Total",
+      "Care of Other Adult",
+      "Accompanying Other Adult",
+      # Care of Individuals outside of Respondent's Household
+      "Care and Accompanying of Children (Out of House)",
+      "Care of Other Adult (Out of House)",
+      "Accompanying Other Adult (Out of House)",
+      # Other Variables
+      "Accompanying and Care Total"
+    ),
+    "Description" = c(
+      "The sex of the respondent",
+      "Weight assigned to each observation, used for computing population estimates",
+      "Personal income of respondent",
+      "Household income of respondent",
+      "Difference in respondent's household and personal income",
+      "Duration of paid work, including paid training and other income sources",
+      "Duration caring for children in household aged 14 years and under",
+      "Duration accompanying children in household aged 14 years and under",
+      "Duration caring for children in household aged 15 years and above",
+      "Duration accompanying children in household aged 15 years and above",
+      "Duration caring for all children in household",
+      "Duration accompanying all children in household",
+      "Duration caring for another adult in household",
+      "Duration accompanying another adult in household",
+      "Duration caring for and accompanying children in other households",
+      "Duration caring for another adult in other household",
+      "Duration accompanying another adult in other household",
+      "Duration of all care and accompanying"
+    )
+  )
+
+# Display table
+var_table |>
+  kable(booktabs = TRUE, caption = "Description of Variables") |>
+  kable_styling(font_size = 8, latex_options = "hold_position") |>
+  add_footnote(
+    "All durations are measured in minutes per 24-hour period starting at 4:00 AM."
+    )
+```
+
+The 2015 Canadian GSS on Time Use distinguishes between direct care activities, such as reading to a child, and accompanying activities, such as such as walking a child to a bus stop [@userguide]. Additionally, variables such as *Care of Other Adult* and *Care of Other Adult (Out of House)* respectively distinguish between time spent caring for an adult that lives in a respondent's home and time spent caring for an adult living in a different house. All durations are measured in minutes spent on an activity within a 24-hour period.
+
+```{r datasample, fig.cap = "Sample of GSS Time Use Data", echo = FALSE}
+#  Create a table to display a sample of data ----------------------------------
+gss_data |>
+  # Select a subset of variables for display
+  select(
+    sex_of_respondent,
+    person_weight,
+    personal_income_group,
+    household_income_group,
+    duration_personal_care_of_child_total,
+    duration_paid_work_total
+  ) |>
+  
+  # Display top 5 rows of data
+  head(5) |>
+  kable(
+    align = "lccccc",
+    col.names = c(
+      "Sex",
+      "Weight",
+      "Personal Income Group",
+      "Household Income Group",
+      "Care of Children Total",
+      "Paid Work"
+      ),
+    booktabs = TRUE,
+    caption = "Sample of GSS Time Use Data"
+    ) |>
+  
+  # Adjust font size
+  kable_styling(font_size = 10, latex_options = "hold_position")
+```
+
+Table \@ref(tab:datasample) depicts a selection of five observations as they appear in the data (with variables omitted for clarity). As discussed in Section \@ref(non-response-and-imputation), observations are provided a *Weight* used to compute estimations and models using the GSS data [@userguide]. These weights adjust the survey data to be more representative of the Canadian population [@userguide].
+
+## Data Analysis
+
+Table \@ref(tab:durations) displays the weighted mean and standard deviations of time use variables by sex.
+
+```{r durations, fig.cap = "Duration of Care Related Activities and Paid Work by Sex of Respondent", echo = FALSE}
+# Create balance table of care-related and paid work duration by sex of respondent
+
+# Create table panels
+panels <- tribble(
+  ~term, ~mean_1, ~std_1, ~mean_2, ~std_2,
+  'Panel A: Care Time Spent on Individuals within Household', "", "", "", "",
+  "", "", "", "", "",
+  'Panel B: Care Time Spent on Individuals outside of Household', "", "", "", "",
+  "", "", "", "", "",
+  'Panel C: Total Time Spent on Care and Paid Work', "", "", "", ""
+  )
+
+# Set Panel Positions
+attr(panels, 'position') <- c(1, 10, 11, 15, 16)
+
+# Create Table
+datasummary_balance(
+  formula = . ~ sex_of_respondent,
+  data = gss_data |> 
+    select(matches("duration.*care_of|duration.*total"), sex_of_respondent, person_weight) |>
+    
+    # Rearrange variable position
+    relocate(
+      c(
+        duration_personal_care_of_child_total,
+        duration_accompanying_care_of_child_total
+        ),
+      .after = duration_accompanying_care_of_child_15_plus
+      ) |>
+    
+    # Rename variables for display
+    # modelsummary package automatically interprets columns titled "weights" as weights
+    rename(
+      "weights" = person_weight,
+      
+      # Care of Individuals in Respondent's Household
+      "Care of Children 14 and Below" = duration_personal_care_of_child_14_under,
+      "Accompanying Children 14 and Below" = duration_accompanying_care_of_child_14_under,
+      "Accompanying Children 14 and Below" = duration_accompanying_care_of_child_14_under,
+      "Care of Children 15 and Above" = duration_personal_care_of_child_15_plus,
+      "Accompanying Children 15 and Above" = duration_accompanying_care_of_child_15_plus,
+      "Care of Children Total" = duration_personal_care_of_child_total,
+      "Accompanying Children Total" = duration_accompanying_care_of_child_total,
+      "Care of Other Adult" = duration_care_of_household_adult_personal_care,
+      "Accompanying Other Adult" = duration_care_of_household_adult_accompanying,
+      
+      # Care of Individuals outside of Respondent's Household
+      "Care and Accompanying of Children (Out of House)" =
+        duration_care_of_child_other_household_personal_care_accompanying,
+      "Care of Other Adult (Out of House)" =
+        duration_care_of_adult_other_household_personal_care,
+      "Accompanying Other Adult (Out of House)" =
+        duration_care_of_adult_other_household_accompanying,
+      
+      # Other Variables
+      "Accompanying and Care Total" = duration_care_total,
+      "Paid Work" = duration_paid_work_total
+  ),
+  dinm = FALSE,
+  add_rows = panels,
+  title = "Duration of Care Related Activities and Paid Work by Sex of Respondent"
+  ) |>
+  
+  # Add headers and footnote
+  add_header_above(
+    c(
+      " ",
+      "Females (N=1711)" = 2,
+      "Males (N=1524)" = 2
+      ),
+    align = "c"
+    ) |>
+  add_footnote(
+    "All means and standard deviations are calculated using weighted observations."
+    ) |>
+  
+  # Fix position
+  kable_styling(latex_options = "hold_position")
+```
+
+Notably, nearly all childcare time spent by both males and females is on the care of children aged 14 and below within their own household. On average, Canadian females spent 70.8 minutes on young in household childcare per day, compared to 38.5 minutes for Canadian men. In contrast, an average of only 8.6 and 6.3 minutes per day were spent by females and males respectively accompanying children in the household of any age. The average time spent caring for adults and children of other households is negligible by comparison. Time spent on these tasks, however, is highly variable. While females and males respectively spent just 1.9 and 2.4 minutes accompanying and caring for children of other households, the standard deviation of time spent on this task was 19.9 minutes for females and 32.1 minutes for males. The average time spent on paid work for females and males was 204.3 and 315.0 minutes respectively, with relatively large standard deviations of 242.1 and 275.2 minutes.
+
+\newpage
+
+Figure \@ref(fig:carevswork) plots the duration of all care and accompanying activities versus the duration of paid work by sex.
+
+```{r carevswork, fig.cap = "Duration of All Care and Accompanying Activities versus Duration of Paid Work", echo = FALSE}
+# Plot the duration of care vs duration of paid work ---------------------------
+gss_data |>
+  ggplot(
+    aes(
+      x = duration_paid_work_total, 
+      y = duration_care_total,
+      colour = sex_of_respondent)
+    ) +
+  geom_point(alpha = 0.3) +
+  geom_smooth(method='lm', formula = y~x, se = FALSE) +
+  
+  # Provide labels
+  labs(
+    x = "Paid Work Duration (minutes)",
+    y = "Accompanying and Care Total Duration (minutes)",
+    colour = "Sex of Respondent"
+    )
+```
+
+Both Canadian males and females experience a decline in time spent on care and accompanying as their time spent on paid work increases. There does not appear to be a significant difference in the rate of this decline between the sexes. The majority of individuals in the sample spending a very large amount of time, greater than ten hours, on daily care and accompanying are females with 0 minutes of time spent on paid work. Likewise, the majority of individuals spending a large amount of time on paid work, greater than 720 minutes or 12 hours, are men with relatively low or 0 minutes spent on care and accompanying activities.
+
+\newpage
+
+Figure \@ref(fig:averageincome) plots the average time spent on caring for children 14 years and below within the household by income and sex.
+
+```{r averageincome, echo = FALSE, warning = FALSE, message=FALSE, fig.width = 12, fig.height = 5, fig.cap = "Average Time Spent on Young Childcare by Sex and Personal Income Group"}
+
+# Plot mean childcare duration by income and sex -------------------------------
+gss_data |>
+  # Create the average and standard deviation at each group
+  group_by(personal_income_group, sex_of_respondent) |>
+  summarize(
+    avg_child_care = 
+      weighted.mean(duration_personal_care_of_child_14_under, weight = person_weight)
+    ) |>
+  
+  # Plot the bar chart
+  ggplot(
+    aes(
+      x = personal_income_group, 
+      y = avg_child_care, 
+      fill = sex_of_respondent
+      )
+    ) +
+  geom_bar(position="dodge", stat="identity") +
+  
+  # Provide labels
+  labs(
+    x = "Personal Income Group",
+    y = "Average Time Spent on Childcare (minutes)",
+    fill = "Sex of Respondent"
+    )
+```
+
+At all income levels females spend substantially more time on average caring for young children in the household than males. This disparity is most evident in the lowest income group, earners with annual income of \$20,000 or less, where females spend nearly twice as much time on childcare as males. Both females and males experience declines in young childcare time as their income level decreases. Moreover, time spent on childcare appears to decrease by around the same proportion for females and males as income increases. Even among respondents who earn the majority of their household income, females still spend significantly more time on the care of young children in the household, as shown in Figure \@ref(fig:averagediffincome).
+
+```{r averagediffincome, echo = FALSE, warning = FALSE, message=FALSE, fig.width = 12, fig.height = 5, fig.cap = "Average Time Spent on Childcare by Sex and Household Income Difference"}
+
+# Plot mean childcare duration by income and sex -------------------------------
+gss_data |>
+  filter(diff_income != "Ambiguous") |>
+  # Create the average and standard deviation at each group
+  group_by(diff_income, sex_of_respondent) |>
+  summarize(
+    avg_child_care = 
+      weighted.mean(duration_personal_care_of_child_14_under, weight = person_weight)
+    ) |>
+  
+  # Plot the bar chart
+  ggplot(
+    aes(
+      x = diff_income, 
+      y = avg_child_care, 
+      fill = sex_of_respondent
+      )
+    ) +
+  geom_bar(position="dodge", stat="identity") +
+  
+  # Provide labels
+  labs(
+    x = "Difference Between Household and Personal Income",
+    y = "Average Time Spent on Childcare (minutes)",
+    fill = "Sex of Respondent"
+    )
+```
+
+On average, females who are the sole household earners, those with no difference in personal and household income, spend around 30 more minutes per day caring for young children in the household than male sole household earners. At all levels of income differences, females spend substantially more time on average caring for young children than males. This difference is most pronounced, however, when personal income is significantly lower than household income (\$100,000 to \$119,999 less).
+
+# Results
+
+## Paid Work and Income
+
+At every level of income, and every difference of household and personal income level, females on average spend substantially more time than males caring for children aged 14 and below within the household, as shown in Figure \@ref(fig:averageincome) and Figure \@ref(fig:averagediffincome). Both sexes experience similar proportionate decreases to childcare time as their incomes decrease. Moreover, the decline in childcare resulting from increased duration of paid work time is similar for both females and males.
+
+## Household Earnings Structure
+
+As demonstrated in Figure \@ref(fig:averagediffincome), among sole household earners, females spend more time on average than males caring for young children in the household. Likewise, even at the highest level of income, those with earnings greater than \$140,000 per year, the inequality between female and male childcare duration persists on average. To better understand the gender differences in childcare time expenditure, Figure \@ref(fig:youngchildcaredensity) plots the distribution of young childcare time use for males and females in the sample at any income level, the lowest and highest income levels, and among sole household earners.
+
+```{r youngchildcaredensity, echo = FALSE, warning = FALSE, fig.width = 8, fig.height = 8, fig.cap = "Daily Time Spent on Personal Care of Young Children (14 Years Old and Under) by Sex and Personal Income Group"}
+# Plot density at any income
+density_income <-
+  gss_data |>
+  filter(
+    number_young_children_in_home != "None"
+    ) |>
+  ggplot() + 
+  geom_density(
+    aes(
+      x=duration_personal_care_of_child_14_under, 
+      color=sex_of_respondent, 
+      fill=sex_of_respondent,
+      weight = person_weight
+      ),
+    alpha=0.2
+    ) +
+  
+  theme(legend.position="none", plot.title = element_text(size = 8)) +
+  
+  labs(
+    title = "All Respondents", 
+    x = "", 
+    y = "Density"
+    )
+
+# Plot density among low income measure
+density_low_income <-
+  gss_data |>
+  filter(
+    number_young_children_in_home != "None", 
+    personal_income_group == "Less than $20,000"
+    ) |>
+  ggplot() + 
+  geom_density(
+    aes(
+      x=duration_personal_care_of_child_14_under, 
+      color = sex_of_respondent, 
+      fill = sex_of_respondent,
+      weight = person_weight
+      ),
+    alpha=0.2
+    ) +
+  
+  theme(legend.position="none", plot.title = element_text(size = 8)) +
+  
+  labs(
+    title = "Respondents with Personal Income of $20,000 or Less", 
+    x = "Time Spent on Care of Young Children (minutes)", 
+    y = "Density"
+    )
+
+# Plot density among high income measure
+density_high_income <-
+  gss_data |>
+  filter(
+    number_young_children_in_home != "None", 
+    personal_income_group == "$120,000 or more"
+    ) |>
+  ggplot() + 
+  geom_density(
+    aes(
+      x=duration_personal_care_of_child_14_under, 
+      color=sex_of_respondent, 
+      fill=sex_of_respondent,
+      weight = person_weight
+      ),
+    alpha=0.2
+    ) +
+  theme(legend.position="none", plot.title = element_text(size = 8)) +
+  labs(
+    title = "Respondents Personal Income of $120,000 or More", 
+    x = "Time Spent on Care of Young Children (minutes)", 
+    y = ""
+    )
+
+# Plot density sole income earners - excludes top of distribution (household_income >= 140K)
+# Note: top household income excluded because ambiguous measure of sole income 
+# (elaborate in paper)
+density_sole_income <-
+  gss_data |>
+  filter(
+    number_young_children_in_home != "None", 
+    diff_income == "Same Income"
+    ) |>
+  ggplot() + 
+  geom_density(
+    aes(
+      x=duration_personal_care_of_child_14_under,
+      color=sex_of_respondent, 
+      fill=sex_of_respondent,
+      weight = person_weight
+      ),
+    alpha=0.2
+    ) +
+  theme(legend.direction = "horizontal", plot.title = element_text(size = 8)) +
+  labs(
+    title = "Respondents who are the Sole Household Earner", 
+    x = "", 
+    y = "",
+    colour = "Sex of Respondent",
+    fill = "Sex of Respondent"
+    )
+
+# Arrange the plots in a 2 x 2 grid, with legend at the bottom
+legend <- get_legend(density_sole_income)
+density_sole_income <- density_sole_income + theme(legend.position="none")
+grid.arrange(
+  density_income, density_sole_income, density_low_income, density_high_income, legend, 
+  ncol = 2, nrow = 3, layout_matrix = cbind(c(1, 3, 5), c(2, 4, 5)),
+  widths = c(2.7, 2.7), heights = c(2.7, 2.7, 0.2)
+  )
+```
+
+The majority of individuals, both male and female, appear to spend fewer than 60 minutes or an hour day caring for young children in their household. Females, however, are much more likely to be in the minority of individuals spending 100 minutes or more on childcare daily. This is particularly evident in the case of sole household earners, among whom females are much more likely than males to be spending between 100 to 400 minutes caring for young children. This is also the case for individuals with personal income of \$20,000 or less, and to a lesser extent for individuals with personal income of \$140,000 or more. Canadian females generally appear much more likely than males to spend exceptionally large amounts of time caring for young children in their home.
+
+Figure \@ref(fig:totalcaredensity) plots the distribution of all care and accompanying time use for males and females in the sample at any income level, the lowest and highest income levels, and among sole household earners.
+
+```{r totalcaredensity, echo = FALSE, warning = FALSE, fig.width = 8, fig.height = 8, fig.cap = "Daily Time Spent on Care and Accompanying by Sex and Personal Income Group"}
+# Plot density at any income
+density_income <-
+  gss_data |>
+  ggplot() + 
+  geom_density(
+    aes(
+      x=duration_care_total, 
+      color=sex_of_respondent, 
+      fill=sex_of_respondent,
+      weight = person_weight
+      ),
+    alpha=0.2
+    ) +
+  theme(legend.position="none", plot.title = element_text(size = 8)) +
+  labs(
+    title = "All Respondents", 
+    x = "", 
+    y = "Density"
+    )
+
+# Plot density among low income measure
+density_low_income <-
+  gss_data |>
+  filter(personal_income_group == "Less than $20,000") |>
+  ggplot() + 
+  geom_density(
+    aes(
+      x=duration_care_total, 
+      color=sex_of_respondent, 
+      fill=sex_of_respondent,
+      weight = person_weight
+      ),
+    alpha=0.2
+    ) +
+  theme(legend.position="none", plot.title = element_text(size = 8)) +
+  labs(
+    title = "Respondents with Personal Income of $20,000 or Less", 
+    x = "Time Spent on Care and Accompanying (minutes)", 
+    y = "Density"
+    )
+
+# Plot density among high income measure
+density_high_income <-
+  gss_data |>
+  filter(personal_income_group == "$120,000 or more") |>
+  ggplot() + 
+  geom_density(
+    aes(
+      x=duration_care_total, 
+      color=sex_of_respondent, 
+      fill=sex_of_respondent,
+      weight = person_weight
+      ),
+    alpha=0.2
+    ) +
+  theme(legend.position="none", plot.title = element_text(size = 8)) +
+  labs(
+    title = "Respondents with Personal Income of $120,000 or More", 
+    x = "Time Spent on Care and Accompanying (minutes)", 
+    y = ""
+    )
+
+# Plot density sole income earners - excludes top of distribution (household_income >= 140K)
+density_sole_income <-
+  gss_data |>
+  filter(diff_income == "Same Income") |>
+  ggplot() + 
+  geom_density(
+    aes(
+      x=duration_care_total, 
+      color=sex_of_respondent, 
+      fill=sex_of_respondent,
+      weight = person_weight
+      ),
+    alpha=0.2
+    ) +
+  theme(legend.direction = "horizontal", plot.title = element_text(size = 8)) +
+  labs(
+    title = "Respondents who are the Sole Household Earner", 
+    x = "", 
+    y = "",
+    colour = "Sex of Respondent",
+    fill = "Sex of Respondent"
+    )
+
+# Arrange the plots in a 2 x 2 grid, with legend at the bottom
+legend <- get_legend(density_sole_income)
+density_sole_income <- density_sole_income + theme(legend.position="none")
+grid.arrange(
+  density_income, density_sole_income, density_low_income, density_high_income, legend, 
+  ncol = 2, nrow = 3, layout_matrix = cbind(c(1, 3, 5), c(2, 4, 5)),
+  widths = c(2.7, 2.7), heights = c(2.7, 2.7, 0.2)
+  )
+```
+
+Similar to the results shown in Figure \@ref(fig:youngchildcaredensity), females are generally more likely than males to spend greater than 100 hours on care and accompanying activities daily. Females are not uniformly overrepresented at greater level of care and accompanying time, as was the case for greater levels of young childcare. In the group of sole income earners, for instance, a greater proportion of males spend between 100 to 200 hours on care and accompanying activities than females. 
+
+These results and those in Figure \@ref(fig:youngchildcaredensity), however, should be considered with caution. A very small proportion of the sample, just 61 females and 136 males, are sole household earners^[Counts and percentages of the sample at each income level can be found in Appendix Table \@ref(tab:incomebalance)]. Likewise, only 66 females and 239 males have an annual personal income of \$140,000 or more. As such, population estimates of time use based on these samples are likely imprecise and are not necessarily representative of the actual population.
+
+\newpage
+
+# Discussion
+
+## Gendered Inequalities in Time Use
+
+As shown in Figure \@ref(fig:averageincome), Canadian females at every income level spend more time on average caring for children aged 14 and under within their household than males. Both females and males, however, experience similar proportionate declines to time spent on childcare as their incomes increase. Likewise, females and males are shown in Figure \@ref(fig:carevswork) to substitute time spent on childcare with time spent on paid work at a similar rate. These results are consistent with the theory of rational economic allocation of household childcare, in which both males and females would be expected to reduce their childcare labour as their earnings increased irrespective of sex. The persistent difference in child care duration within income levels, however, is not explained by this theory.
+
+Figure \@ref(fig:youngchildcaredensity) demonstrates that differences in mean child care duration across sexes is influenced by a large minority of females who spend greater than 100 minutes per day caring for young children in their households. This greater distribution of female respondents spending 100 minutes or more caring for their young children, a duration of childcare far above the mean level for both males and females in the sample, is consistent with the North American ideology surrounding motherhood and the responsibility of working mothers [@Shafer]. The expectation of North American mothers to provide more extensive childcare than North American fathers is well documented [@Shafer]. Among North American mothers, many perceive that childcare requires an extensive personal time commitment on their own behalf and that the needs of their children be placed well before their own [@Shafer]. Working mothers in particular, have reported facing strong expectations to maintain a high level of childcare and felt guilt at the prospect of delegating time away from childcare tasks towards work [@Shafer]. These pressures to maintain a high level of childcare, perpetuated by gendered social expectations of work and systematic gender inequalities, are consistent with the overrepresentation of females at the highest levels of childcare duration and overall care observed in Figure \@ref(fig:youngchildcaredensity) [@Shafer]. Further, the socially-constructed role of women as primary caregivers and nurturers is consistent with the overrepresentation of females at the highest levels of care and accompanying tasks generally, as depicted in Figure \@ref(fig:totalcaredensity) [@Johnston].
+
+This is particularly evident in the distribution of childcare durations for males and females who are the sole household earners. As shown in Figure \@ref(fig:youngchildcaredensity), the proportion of sole household income earning females with a childcare duration greater than 100 minutes is much larger than that of sole household income earning males. The discrepancy between male and female sole earners is consistent with North American ideology that ideal male workers are to have little responsibility for family labour which occurs outside the formal labour market [@Williams]. Contrary to the theory of household childcare allocation based on potential earnings, even in cases where females are the sole household income earners, and thus possess a substantively greater income than their partner, their childcare time use of remains greater than that of male sole income earners. Other factors then, such as the enforcement of gender norms noted by @Moyser, are yet required to fully explain the disparities in care between Canadian males and females.
+
+## Paper Limitations
+
+This paper aims to demonstrate that both generally, and within specific categories of household and personal income, Canadian females spend a disproportionately large amount of time on childcare and other care related labour compared to Canadian males. As such, this investigation does not attempt an extensive analysis of the causal determinants of time spent on childcare. Many other factors effecting time spent on care related activities, such as racial and cultural background, age, education level, and number of children are not considered in this paper. Without controlling for these factors, which may differentially relate to sex and childcare duration, it is not possible to accurately portray the true effect of sex on the time spent caring for children or others. The paper does, however, provide motivation to explore more rigorously the root causes of the unequal childcare labour burden held by Canadian women.
+
+As discussed in Section \@ref(data-collection), the data used to conduct this investigation, collected via the 2015 Canadian General Social Survey on Time Use, suffers from notable pitfalls which may prevent the results here from being generalized to the Canadian population. High non-response rates to the survey and a limited target population both render the GSS sample somewhat unrepresentative of the true Canadian population. Of the total sample surveyed by the GSS, this paper only considers a small subset of 3235 respondents in two-parent households with children under the age of 25. While the GSS data is weighted, such that computed estimates are more representative of the Canadian population, the weights are not computed for the specific population of two-parent households. It is possible then, that the weights used in this paper may further bias the results presented, rather than accurately adjust the representation of the sample.
+
+Finally, this paper relies on broad measures of both personal and household income, which are capped at upper income thresholds. These measures do not allow for a description of the marginal effect of income gains on time spent on care related activities. Additionally, as shown in Appendix Table \@ref(tab:incomebalance), in many cases the difference between an individual's personal and household income is not possible to determine. Consequently, the sample of males and females who are sole household income earners (those with a personal income equal to their household income) is relatively small. This further jeopardizes the external validity of the results and the precision of statistics used in this paper.
+
+\newpage
+
+# Appendix {-}
+
+Table \@ref(tab:incomebalance) summarizes the count and percentage of respondents in the sample at each income level by sex. Note that, for those respondents in the sample for which either their personal income is \$120,000 or more or their household income is \$140,000 dollars or more, it is not possible to determine the size of the difference in personal and household income. As such, these cases are coded as *Ambiguous*.
+
+```{r incomebalance, warning = FALSE, fig.cap = "Proportions of Females and Males within Each Income Group", echo = FALSE}
+# Create balance table of income groups by sex of respondent -------------------
+
+# Create rows to separate income variables in the table
+blanks <- tribble(
+  ~term, ~term_2, ~n_1, ~per_1, ~n_2, ~per_2,
+  "", "", "", "", "", "",
+  "", "", "", "", "", ""
+)
+
+# Set row positions
+attr(blanks, 'position') <- c(8, 17)
+
+# Create table
+datasummary_balance(
+  formula = . ~ sex_of_respondent,
+  data = 
+    gss_data |>
+    select(matches("income_group|diff"), sex_of_respondent, person_weight) |>
+    rename(
+      "weights" = person_weight,
+      "Personal Income" = personal_income_group,
+      "Household Income" = household_income_group,
+      "Income Difference" = diff_income
+      ),
+  dinm = FALSE,
+  add_rows = blanks,
+  title = "Proportions of Females and Males within Each Income Group"
+  ) |>
+  
+  # Add footnote
+  add_footnote(
+    "Counts and percentages are unweighted."
+    ) |>
+  
+  # Fix table position
+  kable_styling(latex_options = "hold_position")
+```
+
+\newpage
+
+Figure \@ref(fig:surveysupplement) displays a supplemental survey designed to augment the 2015 Canadian General Social Survey on Time Use. The primary goal of the survey is to reduce the ambiguity of respondent's personal and spousal/partner income and to determine directly if respondents are the sole earners in their household. By observing the exact reported income of both the respondent and their spouse/partner, the effect of personal, spousal/partner, and household income on the care time expenditures of males and females can be estimated more precisely. Moreover, by asking respondents of their sole household earner status directly, the survey supplement reduces the number of observations lost to ambiguity in the GSS on Time Use, as discussed in Section \@ref(paper-limitations).
+
+Additionally, the survey supplement asks respondents to report the amount of time spent on childcare relative to their spouse/partner. This variable allows for the investigation of self-perceived childcare time use compared to actual childcare time use for Canadian males and females.
+
+The supplemental survey can be accessed via the following link https://forms.gle/Tbr3XnPXTz7GEnaQ7.
+
+\newpage
+
+```{r surveysupplement, out.width="75%", fig.align="center", echo=FALSE, include=TRUE, fig.cap = "2015 Canadian General Social Survey on Time Use Supplemental Survey"}
+knitr::include_graphics(here("outputs/paper/survey_supplement.pdf"))
+```
+
+```{r out.width="75%", out.extra="page=2", fig.align="center", echo=FALSE, include=TRUE}
+knitr::include_graphics(here("outputs/paper/survey_supplement.pdf"))
+```
+
+```{r out.width="75%", out.extra="page=3", fig.align="center", echo=FALSE, include=TRUE}
+knitr::include_graphics(here("outputs/paper/survey_supplement.pdf"))
+```
+
+\newpage
+
+Figure \@ref(fig:survey) displays the questionnaire used to conduct the 2015 Canadian General Social Survey on Time Use [@survey].
+
+```{r survey, out.width="75%", fig.align="center", echo=FALSE, include=TRUE, fig.cap = "2015 Canadian General Social Survey on Time Use Questionaire (continued on following pages)"}
+knitr::include_graphics(here("outputs/paper/survey.pdf"))
+```
+
+```{r out.width="50%", fig.align="center", out.extra="page=2", echo=FALSE, include=TRUE}
+knitr::include_graphics(here("outputs/paper/survey.pdf"))
+```
+
+```{r out.width="50%", fig.align="center", out.extra="page=3", echo=FALSE, include=TRUE}
+knitr::include_graphics(here("outputs/paper/survey.pdf"))
+```
+
+```{r out.width="50%", fig.align="center", out.extra="page=4", echo=FALSE, include=TRUE}
+knitr::include_graphics(here("outputs/paper/survey.pdf"))
+```
+
+```{r out.width="50%", fig.align="center", out.extra="page=5", echo=FALSE, include=TRUE}
+knitr::include_graphics(here("outputs/paper/survey.pdf"))
+```
+
+```{r out.width="50%", fig.align="center", out.extra="page=6", echo=FALSE, include=TRUE}
+knitr::include_graphics(here("outputs/paper/survey.pdf"))
+```
+
+```{r out.width="50%", fig.align="center", out.extra="page=7", echo=FALSE, include=TRUE}
+knitr::include_graphics(here("outputs/paper/survey.pdf"))
+```
+
+```{r out.width="50%", fig.align="center", out.extra="page=8", echo=FALSE, include=TRUE}
+knitr::include_graphics(here("outputs/paper/survey.pdf"))
+```
+
+```{r out.width="50%", fig.align="center", out.extra="page=9", echo=FALSE, include=TRUE}
+knitr::include_graphics(here("outputs/paper/survey.pdf"))
+```
+
+```{r out.width="50%", fig.align="center", out.extra="page=10", echo=FALSE, include=TRUE}
+knitr::include_graphics(here("outputs/paper/survey.pdf"))
+```
+
+```{r out.width="50%", fig.align="center", out.extra="page=11", echo=FALSE, include=TRUE}
+knitr::include_graphics(here("outputs/paper/survey.pdf"))
+```
+
+```{r out.width="50%", fig.align="center", out.extra="page=12", echo=FALSE, include=TRUE}
+knitr::include_graphics(here("outputs/paper/survey.pdf"))
+```
+
+```{r out.width="50%", fig.align="center", out.extra="page=13", echo=FALSE, include=TRUE}
+knitr::include_graphics(here("outputs/paper/survey.pdf"))
+```
+
+```{r out.width="50%", fig.align="center", out.extra="page=14", echo=FALSE, include=TRUE}
+knitr::include_graphics(here("outputs/paper/survey.pdf"))
+```
+
+```{r out.width="50%", fig.align="center", out.extra="page=15", echo=FALSE, include=TRUE}
+knitr::include_graphics(here("outputs/paper/survey.pdf"))
+```
+
+```{r out.width="50%", fig.align="center", out.extra="page=16", echo=FALSE, include=TRUE}
+knitr::include_graphics(here("outputs/paper/survey.pdf"))
+```
+
+```{r out.width="50%", fig.align="center", out.extra="page=17", echo=FALSE, include=TRUE}
+knitr::include_graphics(here("outputs/paper/survey.pdf"))
+```
+
+```{r out.width="50%", fig.align="center", out.extra="page=18", echo=FALSE, include=TRUE}
+knitr::include_graphics(here("outputs/paper/survey.pdf"))
+```
+
+```{r out.width="50%", fig.align="center", out.extra="page=19", echo=FALSE, include=TRUE}
+knitr::include_graphics(here("outputs/paper/survey.pdf"))
+```
+
+```{r out.width="50%", fig.align="center", out.extra="page=20", echo=FALSE, include=TRUE}
+knitr::include_graphics(here("outputs/paper/survey.pdf"))
+```
+
+```{r out.width="50%", fig.align="center", out.extra="page=21", echo=FALSE, include=TRUE}
+knitr::include_graphics(here("outputs/paper/survey.pdf"))
+```
+
+```{r out.width="50%", fig.align="center", out.extra="page=22", echo=FALSE, include=TRUE}
+knitr::include_graphics(here("outputs/paper/survey.pdf"))
+```
+
+```{r out.width="50%", fig.align="center", out.extra="page=23", echo=FALSE, include=TRUE}
+knitr::include_graphics(here("outputs/paper/survey.pdf"))
+```
+
+```{r out.width="50%", fig.align="center", out.extra="page=24", echo=FALSE, include=TRUE}
+knitr::include_graphics(here("outputs/paper/survey.pdf"))
+```
+
+```{r out.width="50%", fig.align="center", out.extra="page=25", echo=FALSE, include=TRUE}
+knitr::include_graphics(here("outputs/paper/survey.pdf"))
+```
+
+```{r out.width="50%", fig.align="center", out.extra="page=26", echo=FALSE, include=TRUE}
+knitr::include_graphics(here("outputs/paper/survey.pdf"))
+```
+
+```{r out.width="50%", fig.align="center", out.extra="page=27", echo=FALSE, include=TRUE}
+knitr::include_graphics(here("outputs/paper/survey.pdf"))
+```
+
+```{r out.width="50%", fig.align="center", out.extra="page=28", echo=FALSE, include=TRUE}
+knitr::include_graphics(here("outputs/paper/survey.pdf"))
+```
+
+```{r out.width="50%", fig.align="center", out.extra="page=29", echo=FALSE, include=TRUE}
+knitr::include_graphics(here("outputs/paper/survey.pdf"))
+```
+
+```{r out.width="50%", fig.align="center", out.extra="page=30", echo=FALSE, include=TRUE}
+knitr::include_graphics(here("outputs/paper/survey.pdf"))
+```
+
+```{r out.width="50%", fig.align="center", out.extra="page=31", echo=FALSE, include=TRUE}
+knitr::include_graphics(here("outputs/paper/survey.pdf"))
+```
+
+```{r out.width="50%", fig.align="center", out.extra="page=32", echo=FALSE, include=TRUE}
+knitr::include_graphics(here("outputs/paper/survey.pdf"))
+```
+
+```{r out.width="50%", fig.align="center", out.extra="page=33", echo=FALSE, include=TRUE}
+knitr::include_graphics(here("outputs/paper/survey.pdf"))
+```
+
+```{r out.width="50%", fig.align="center", out.extra="page=34", echo=FALSE, include=TRUE}
+knitr::include_graphics(here("outputs/paper/survey.pdf"))
+```
+
+\newpage
+
+# References
+
+
